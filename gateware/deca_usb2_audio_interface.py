@@ -339,25 +339,25 @@ class USB2AudioInterface(Elaboratable):
         feedbackValue      = Signal(32, reset=0x60000)
         bitPos             = Signal(5)
 
-        # this tracks the number of ADAT frames since the last USB frame
+        # this tracks the number of audio frames since the last USB frame
         # 12.288MHz / 8kHz = 1536, so we need at least 11 bits = 2048
         # we need to capture 32 micro frames to get to the precision
         # required by the USB standard, so and that is 0xc000, so we
         # need 16 bits here
-        adat_clock_counter = Signal(16)
+        audio_clock_counter = Signal(16)
         sof_counter        = Signal(5)
 
-        adat_clock_usb = Signal()
-        m.submodules.adat_clock_usb_sync = FFSynchronizer(ClockSignal("adat"), adat_clock_usb, o_domain="usb")
-        m.submodules.adat_clock_usb_pulse = adat_clock_usb_pulse = DomainRenamer("usb")(EdgeToPulse())
-        adat_clock_tick = Signal()
+        audio_clock_usb = Signal()
+        m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("audio"), audio_clock_usb, o_domain="usb")
+        m.submodules.audio_clock_usb_pulse = audio_clock_usb_pulse = DomainRenamer("usb")(EdgeToPulse())
+        audio_clock_tick = Signal()
         m.d.usb += [
-            adat_clock_usb_pulse.edge_in.eq(adat_clock_usb),
-            adat_clock_tick.eq(adat_clock_usb_pulse.pulse_out),
+            audio_clock_usb_pulse.edge_in.eq(audio_clock_usb),
+            audio_clock_tick.eq(audio_clock_usb_pulse.pulse_out),
         ]
 
-        with m.If(adat_clock_tick):
-            m.d.usb += adat_clock_counter.eq(adat_clock_counter + 1)
+        with m.If(audio_clock_tick):
+            m.d.usb += audio_clock_counter.eq(audio_clock_counter + 1)
 
         with m.If(usb.sof_detected):
             m.d.usb += sof_counter.eq(sof_counter + 1)
@@ -371,8 +371,8 @@ class USB2AudioInterface(Elaboratable):
             # so it wraps automatically every 32 SOFs
             with m.If(sof_counter == 0):
                 m.d.usb += [
-                    feedbackValue.eq(adat_clock_counter << 3),
-                    adat_clock_counter.eq(0),
+                    feedbackValue.eq(audio_clock_counter << 3),
+                    audio_clock_counter.eq(0),
                 ]
 
         m.d.comb += [
@@ -394,28 +394,26 @@ class USB2AudioInterface(Elaboratable):
                 m.d.usb += num_channels.eq(2)
 
         nr_channel_bits = Shape.cast(range(self.NR_CHANNELS)).width
-        m.submodules.usb_to_adat_fifo = usb_to_adat_fifo = \
+        m.submodules.usb_to_audio_fifo = usb_to_audio_fifo = \
             AsyncFIFO(width=24 + nr_channel_bits + 2, depth=64, w_domain="usb", r_domain="sync")
 
         m.d.comb += [
             # wire USB to FIFO
             usb_to_channel_stream.usb_stream_in.stream_eq(ep1_out.stream),
-            *connect_stream_to_fifo(usb_to_channel_stream.channel_stream_out, usb_to_adat_fifo),
+            *connect_stream_to_fifo(usb_to_channel_stream.channel_stream_out, usb_to_audio_fifo),
 
-            usb_to_adat_fifo.w_data[24:(24 + nr_channel_bits)]
+            usb_to_audio_fifo.w_data[24:(24 + nr_channel_bits)]
                 .eq(usb_to_channel_stream.channel_stream_out.channel_no),
 
-            usb_to_adat_fifo.w_data[(24 + nr_channel_bits)]
+            usb_to_audio_fifo.w_data[(24 + nr_channel_bits)]
                 .eq(usb_to_channel_stream.channel_stream_out.first),
 
-            usb_to_adat_fifo.w_data[(24 + nr_channel_bits + 1)]
+            usb_to_audio_fifo.w_data[(24 + nr_channel_bits + 1)]
                 .eq(usb_to_channel_stream.channel_stream_out.last),
 
         ]
 
         if self.USE_ILA:
-            adat_clock = Signal()
-            m.d.comb += adat_clock.eq(ClockSignal("adat"))
             sof_wrap = Signal()
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
@@ -452,12 +450,12 @@ class USB2AudioInterface(Elaboratable):
 
             ILACoreParameters(ila).pickle()
 
-        led = platform.request("led")
+        leds = Cat([platform.request("led", i) for i in range(8)])
         m.d.comb += [
-            led[0].eq(usb.tx_activity_led),
-            led[1].eq(usb.rx_activity_led),
-            led[2].eq(usb.suspended),
-            led[3].eq(usb.reset_detected),
+            leds[0].eq(usb.tx_activity_led),
+            leds[1].eq(usb.rx_activity_led),
+            leds[2].eq(usb.suspended),
+            leds[3].eq(usb.reset_detected),
         ]
 
         return m

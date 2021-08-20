@@ -82,7 +82,7 @@ class AudioInit(Elaboratable):
 
         audio_locked = Signal()
 
-        m.submodules.audio_pll += Instance("ALTPLL",
+        m.submodules.audio_pll = Instance("ALTPLL",
             p_BANDWIDTH_TYPE         = "AUTO",
             # ADAT clock = 12.288 MHz = 48 kHz * 256
             p_CLK0_DIVIDE_BY         = 83,
