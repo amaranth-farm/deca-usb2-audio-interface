@@ -16,54 +16,33 @@ class AudioInit(Elaboratable):
     # PLL Disabled
     # DOSR 128
     init_sequence = [
-        # Initialize to Page 0
-        [0x30, 0x00, 0x00],
-        # Initialize the device through software reset
-        [0x30, 0x01, 0x01],
-        # Power up the NDAC divider with value 1
-        [0x30, 0x0b, 0x81],
-        # Power up the MDAC divider with value 2
-        [0x30, 0x0c, 0x82],
-        # Program the OSR of DAC to 128
-        [0x30, 0x0d, 0x00],
+        [0x30, 0x00, 0x00], # Initialize to Page 0
+        [0x30, 0x01, 0x01], # Initialize the device through software reset
+        [0x30, 0x0b, 0x81], # Power up the NDAC divider with value 1
+        [0x30, 0x0c, 0x82], # Power up the MDAC divider with value 2
+        [0x30, 0x0d, 0x00], # Program the OSR of DAC to 128
         [0x30, 0x0e, 0x80],
-        # Set the Audio Interface to I2S 24bits PTM_P4
-        [0x30, 0x1b, 0b0010_0000],
-        # Set the DAC Mode to PRB_P8
-        [0x30, 0x3c, 0x08],
+        [0x30, 0x1b, 0b0010_0000], # Set the Audio Interface to I2S 24bits PTM_P4
+        [0x30, 0x3c, 0x08],        # Set the DAC Mode to PRB_P8
+        [0x30, 0x00, 0x01],        # Select Page 1
+        [0x30, 0x01, 0x00],        # Enable Internal Crude AVdd because AVDD it is not connected
+        [0x30, 0x02, 0x00],        # Enable Master Analog Power Control
+        [0x30, 0x7b, 0x01],        # Set the REF charging time to 40ms
 
-        # Select Page 1
-        [0x30, 0x00, 0x01],
-        # Enable Internal Crude AVdd because AVDD it is not connected
-        [0x30, 0x01, 0x00],
-        # Enable Master Analog Power Control
-        [0x30, 0x02, 0x00],
-        # Set the REF charging time to 40ms
-        [0x30, 0x7b, 0x01],
         # Set the Input Common Mode to 0.9V and Output Common Mode for Headphone to
-        # Input Common Mode
-        [0x30, 0x0a, 0x00],
-        # Route Left DAC to LOL
-        [0x30, 0x0e, 0x08],
-        # Route Right DAC to LOR
-        [0x30, 0x0f, 0x08],
-        # Set the DAC PTM mode to PTM_P3/4
-        [0x30, 0x03, 0x00],
+        [0x30, 0x0a, 0x00], # Input Common Mode
+        [0x30, 0x0e, 0x08], # Route Left DAC to LOL
+        [0x30, 0x0f, 0x08], # Route Right DAC to LOR
+        [0x30, 0x03, 0x00], # Set the DAC PTM mode to PTM_P3/4
         [0x30, 0x04, 0x00],
-        # Set the LOL gain to 0dB
-        [0x30, 0x12, 0x00],
-        # Set the LOR gain to 0dB
-        [0x30, 0x13, 0x00],
-        # Power up LOL and LOR drivers
-        [0x30, 0x09, 0b0000_1100],
+        [0x30, 0x12, 0x00],        # Set the LOL gain to 0dB
+        [0x30, 0x13, 0x00],        # Set the LOR gain to 0dB
+        [0x30, 0x09, 0b0000_1100], # Power up LOL and LOR drivers
+        [0x30, 0x00, 0x00],        # Select Page 0
 
-        # Select Page 0
-        [0x30, 0x00, 0x00],
         # Power up the Left and Right DAC Channels with route the Left Audio digital data to
-        # Left Channel DAC and Right Audio digital data to Right Channel DAC
-        [0x30, 0x3f, 0b11_01_01_10],
-        # Unmute the DAC digital volume control
-        [0x30, 0x40, 0x00],
+        [0x30, 0x3f, 0b11_01_01_10], # Left Channel DAC and Right Audio digital data to Right Channel DAC
+        [0x30, 0x40, 0x00],          # Unmute the DAC digital volume control
     ]
 
     beep_test = [
@@ -71,10 +50,10 @@ class AudioInit(Elaboratable):
         [0x30, 0x01, 0x01], #software reset
         [0x30, 0x04, 0x00], #MCLK PIN is CODEC_CLKIN
         [0x30, 0x1B, 0x0D], #BCLK is output from the device & WCLK is output from the device & DOUT will be high impedance after data has been transferred
-        [0x30, 0x0b, 0x81], #NDAC divider power up / NDAC=1
-        [0x30, 0x0C, 0x82], #MDAC divider power up / MDAC=2
-        [0x30, 0x0D, 0x00], #DOSR MSB
-        [0x30, 0x0E, 0x80], #DOSR LSB  / DOSR=128
+        [0x30, 0x0b, 0x81], # Power up the NDAC divider with value 1
+        [0x30, 0x0c, 0x82], # Power up the MDAC divider with value 2
+        [0x30, 0x0d, 0x00], # Program the OSR of DAC to 128
+        [0x30, 0x0e, 0x80],
         [0x30, 0x1E, 0x90], #BCLK N divider powered up & BCLK N divider = 128
         [0x30, 0x3c, 0x19], #Set the DAC Mode to PRB_P25
         [0x30, 0x3f, 0xd4], #Power up the Left and Right DAC
@@ -138,7 +117,7 @@ class AudioInit(Elaboratable):
         m.d.comb += ResetSignal("audio").eq(~audio_locked)
 
         m.submodules.audio_init_streamer = init_streamer = \
-            PacketListStreamer(self.beep_test)
+            PacketListStreamer(self.init_sequence)
 
         m.d.comb += [
             init_streamer.start.eq(rising_edge_detected(m, self.start, domain="usb")),
