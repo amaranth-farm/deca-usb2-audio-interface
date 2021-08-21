@@ -11,7 +11,7 @@ from nmigen.lib.cdc      import FFSynchronizer
 from nmigen_library.stream            import connect_stream_to_fifo, connect_fifo_to_stream
 from nmigen_library.stream.i2c        import I2CStreamTransmitter
 from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
-from nmigen_library.utils             import EdgeToPulse
+from nmigen_library.utils             import EdgeToPulse, Timer
 
 
 from luna                import top_level_cli
@@ -199,7 +199,7 @@ class USB2AudioInterface(Elaboratable):
         # we need the default alternate setting to be stereo
         # out for windows to automatically recognize
         # and use this audio interface
-        self.create_output_streaming_interface(c, nr_channels=2, alt_setting_nr=1)
+        self.create_output_streaming_interface(c, nr_channels=self.NR_CHANNELS, alt_setting_nr=1)
 
 
     def create_input_streaming_interface(self, c, *, nr_channels, alt_setting_nr, channel_config=0):
@@ -250,7 +250,7 @@ class USB2AudioInterface(Elaboratable):
         c.add_subordinate_descriptor(quietAudioStreamingInterface)
 
         # Windows wants a stereo pair as default setting, so let's have it
-        self.create_input_streaming_interface(c, nr_channels=2, alt_setting_nr=1, channel_config=0x3)
+        self.create_input_streaming_interface(c, nr_channels=self.NR_CHANNELS, alt_setting_nr=1, channel_config=0x3)
 
     def elaborate(self, platform):
         m = Module()
@@ -259,19 +259,21 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.car = platform.clock_domain_generator()
         m.submodules.audio_init = audio_init = AudioInit()
         i2c_audio_pads = platform.request("i2c_audio")
-        m.submodules.i2c = i2c = I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3))
+        m.submodules.i2c = i2c = I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3), clk_stretch=False)
+        m.submodules.audio_init_delay = audio_init_delay = \
+            Timer(width=24, load=int(16e6), reload=0, allow_restart=False)
 
         audio = platform.request("audio")
         m.d.comb += [
             audio.mclk.eq(ClockSignal("audio")),
             audio.reset.eq(ResetSignal("audio")),
             audio.spi_select.eq(0), # choose i2c
+            audio_init_delay.start.eq(1),
+            audio_init.start.eq(audio_init_delay.done),
         ]
 
-        #m.submodules.audio_init_delay = audio_init_delay = nmigen_libra
-
-        with m.If(~audio_init.done):
-            m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
+        #with m.If(~audio_init.done):
+        m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
 
         # Create our USB-to-serial converter.
         ulpi = platform.request(platform.default_usb_connection)
@@ -345,7 +347,7 @@ class USB2AudioInterface(Elaboratable):
         # required by the USB standard, so and that is 0xc000, so we
         # need 16 bits here
         audio_clock_counter = Signal(16)
-        sof_counter        = Signal(5)
+        sof_counter         = Signal(5)
 
         audio_clock_usb = Signal()
         m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("audio"), audio_clock_usb, o_domain="usb")
@@ -418,8 +420,10 @@ class USB2AudioInterface(Elaboratable):
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
             signals = [
-                i2c_audio_pads.sda,
-                i2c_audio_pads.scl,
+                #i2c_audio_pads.sda,
+                #i2c_audio_pads.scl,
+                audio_init.start,
+                audio_init.done,
                 i2c.stream_in.valid,
                 i2c.stream_in.ready,
                 i2c.stream_in.payload,
@@ -428,13 +432,13 @@ class USB2AudioInterface(Elaboratable):
             ]
 
             signals_bits = sum([s.width for s in signals])
-            depth = int(33*8*1024/signals_bits)
+            depth = 4 * 8 * 1024 #int(33*8*1024/signals_bits)
             m.submodules.ila = ila = \
                 StreamILA(
                     signals=signals,
                     sample_depth=depth,
                     domain="usb", o_domain="usb",
-                    samples_pretrigger=512)
+                    samples_pretrigger=32)
 
             stream_ep = USBMultibyteStreamInEndpoint(
                 endpoint_number=3, # EP 3 IN
@@ -445,7 +449,7 @@ class USB2AudioInterface(Elaboratable):
 
             m.d.comb += [
                 stream_ep.stream.stream_eq(ila.stream),
-                ila.trigger.eq(audio_init.start),
+                ila.trigger.eq(audio_init_delay.done),
             ]
 
             ILACoreParameters(ila).pickle()
