@@ -6,28 +6,25 @@ from nmigen_library.utils import rising_edge_detected
 from nmigen_library.stream.generator import PacketListStreamer
 
 class AudioInit(Elaboratable):
-    # Assumption
-    # AVdd = 1.8V, DVdd = 1.8V
     # MCLK = 12.288MHz
-    # Ext C = 47uF
-    # Based on C the wait time will change.
-    # Wait time = N*Rpop*C + 4* Offset ramp time
-    # Default settings used.
     # PLL Disabled
     # DOSR 128
-    init_sequence = [
+    init_sequence_dac = [
         [0x30, 0x00, 0x00], # Initialize to Page 0
         [0x30, 0x01, 0x01], # Initialize the device through software reset
         [0x30, 0x0b, 0x81], # Power up the NDAC divider with value 1
         [0x30, 0x0c, 0x82], # Power up the MDAC divider with value 2
         [0x30, 0x0d, 0x00], # Program the OSR of DAC to 128
         [0x30, 0x0e, 0x80],
-        [0x30, 0x1b, 0b0010_0000], # Set the Audio Interface to I2S 24bits PTM_P4
-        [0x30, 0x3c, 0x08],        # Set the DAC Mode to PRB_P8
-        [0x30, 0x00, 0x01],        # Select Page 1
-        [0x30, 0x01, 0x00],        # Enable Internal Crude AVdd because AVDD it is not connected
-        [0x30, 0x02, 0x00],        # Enable Master Analog Power Control
-        [0x30, 0x7b, 0x01],        # Set the REF charging time to 40ms
+        [0x30, 0x1e, 0x80 + 4],       # BCLK N divider powered up & BCLK N divider = 4
+        [0x30, 0x1b, 0b00_10_1_1_00], # I2S, 24bit, BCLK Out, WCLK Out, 00
+        #[0x30, 0x1b, 0b0010_0000],    # Set the Audio Interface to I2S 24bits PTM_P4
+        [0x30, 0x3c, 0x08],           # Set the DAC Mode to PRB_P8
+
+        [0x30, 0x00, 0x01],          # Select Page 1
+        [0x30, 0x01, 0x08],          # Disable weak connection of AVDD with DVDD
+        [0x30, 0x02, 0x00],          # Enable Master Analog Power Control
+        [0x30, 0x7b, 0x01],          # Set the REF charging time to 40ms
 
         # Set the Input Common Mode to 0.9V and Output Common Mode for Headphone to
         [0x30, 0x0a, 0x00], # Input Common Mode
@@ -38,11 +35,31 @@ class AudioInit(Elaboratable):
         [0x30, 0x12, 0x00],        # Set the LOL gain to 0dB
         [0x30, 0x13, 0x00],        # Set the LOR gain to 0dB
         [0x30, 0x09, 0b0000_1100], # Power up LOL and LOR drivers
-        [0x30, 0x00, 0x00],        # Select Page 0
 
+        [0x30, 0x00, 0x00],        # Select Page 0
         # Power up the Left and Right DAC Channels with route the Left Audio digital data to
         [0x30, 0x3f, 0b11_01_01_10], # Left Channel DAC and Right Audio digital data to Right Channel DAC
         [0x30, 0x40, 0x00],          # Unmute the DAC digital volume control
+    ]
+
+    init_sequence_adc = [
+        [0x30, 0x00, 0x00],        # Select Page 0
+        [0x30, 0x12, 0x81],        # Power up the NADC divider with value 1
+        [0x30, 0x13, 0x82],        # Power up the MADC divider with value 2
+        [0x30, 0x14, 0b1000_0000], # Program the OSR of ADC to 128
+        [0x30, 0x3d, 0x01],        # Select ADC PRB_R1
+
+        [0x30, 0x00, 0x01],        # Select Page 1
+        [0x30, 0x18, 0x05],        # Mixer Amplifier Left Volume Control Volume Control = -2.3dB
+        [0x30, 0x19, 0x05],        # Mixer Amplifier Right Volume Control Volume Control = -2.3dB
+        [0x30, 0x34, 0x30],        # IN2L is routed to Left MICPGA with 40k resistance
+        [0x30, 0x36, 0x31],        # CM is routed to Left MICPGA via CM2L with 10k resistance
+        [0x30, 0x37, 0x30],        # IN2R is routed to Right MICPGA with 40k resistance
+        [0x30, 0x39, 0x31],        # CM is routed to Right MICPGA via CM2R with 10k resistance
+
+        [0x30, 0x00, 0x00],        # Select Page 0
+        [0x30, 0x51, 0xc2],        # Left+Right Channel ADC is powered up & ADC Volume Control Soft-Stepping disabled
+        [0x30, 0x52, 0x00],        # Right ADC Channel Un-muted
     ]
 
     beep_test = [
@@ -117,7 +134,7 @@ class AudioInit(Elaboratable):
         m.d.comb += ResetSignal("audio").eq(~audio_locked)
 
         m.submodules.audio_init_streamer = init_streamer = \
-            PacketListStreamer(self.init_sequence)
+            PacketListStreamer(self.init_sequence_dac + self.init_sequence_adc)
 
         m.d.comb += [
             init_streamer.start.eq(rising_edge_detected(m, self.start, domain="usb")),
