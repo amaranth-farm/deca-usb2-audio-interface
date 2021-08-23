@@ -461,5 +461,5 @@ class USB2AudioInterface(Elaboratable):
         return m
 
 if __name__ == "__main__":
-    os.environ["LUNA_PLATFORM"] = "luna.gateware.platform.arrow_deca:ArrowDECAPlatform"
+    os.environ["LUNA_PLATFORM"] = "arrow_deca:ArrowDECAPlatform"
     top_level_cli(USB2AudioInterface)
