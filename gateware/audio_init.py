@@ -76,7 +76,7 @@ class AudioInit(Elaboratable):
         [0x30, 0x0d, 0x00],     # Program the OSR of DAC to 128
         [0x30, 0x0e, 0x80],
         [0x30, 0x1e, 0x80 + 4], # BCLK N divider powered up & BCLK N divider = 4
-        [0x30, 0x3c, 0x19],     #Set the DAC Mode to PRB_P25
+        [0x30, 0x3c, 0x08],     # Set the DAC Mode to PRB_P8
         [0x30, 0x3f, 0xd4],     #Power up the Left and Right DAC
 
         [0x30, 0x00, 0x01],     # page1
