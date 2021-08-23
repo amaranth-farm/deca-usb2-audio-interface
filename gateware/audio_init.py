@@ -67,36 +67,36 @@ class AudioInit(Elaboratable):
     ]
 
     minimal_dac = [
-        [0x30, 0x00, 0x00], # Initialize to Page 0
-        [0x30, 0x01, 0x01], # software reset
-        [0x30, 0x04, 0x00], # MCLK PIN is CODEC_CLKIN
-        [0x30, 0x1B, 0x0D], # BCLK is output from the device & WCLK is output from the device & DOUT will be high impedance after data has been transferred
-        [0x30, 0x0b, 0x81], # Power up the NDAC divider with value 1
-        [0x30, 0x0c, 0x82], # Power up the MDAC divider with value 2
-        [0x30, 0x0d, 0x00], # Program the OSR of DAC to 128
+        [0x30, 0x00, 0x00],     # Initialize to Page 0
+        [0x30, 0x01, 0x01],     # software reset
+        [0x30, 0x04, 0x00],     # MCLK PIN is CODEC_CLKIN
+        [0x30, 0x1b, 0b00_11_1_1_00], # I2S, 32bit, BCLK Out, WCLK Out, 00
+        [0x30, 0x0b, 0x81],     # Power up the NDAC divider with value 1
+        [0x30, 0x0c, 0x82],     # Power up the MDAC divider with value 2
+        [0x30, 0x0d, 0x00],     # Program the OSR of DAC to 128
         [0x30, 0x0e, 0x80],
         [0x30, 0x1e, 0x80 + 4], # BCLK N divider powered up & BCLK N divider = 4
-        [0x30, 0x3c, 0x19], #Set the DAC Mode to PRB_P25
-        [0x30, 0x3f, 0xd4], #Power up the Left and Right DAC
+        [0x30, 0x3c, 0x19],     #Set the DAC Mode to PRB_P25
+        [0x30, 0x3f, 0xd4],     #Power up the Left and Right DAC
 
-        [0x30, 0x00, 0x01], #page1
-        [0x30, 0x09, 0x0f], #Power up LOL and LOR drivers
-        [0x30, 0x0e, 0x08], #Left DAC----LOL
-        [0x30, 0x0f, 0x08], #Right DAC---LOR
-        [0x30, 0x12, 0x08], #LOL driver gain is 8dB
-        [0x30, 0x13, 0x08], #LOR driver gain is 8dB
-        [0x30, 0x01, 0x08], #Disabled weak connection of AVDD with DVDD
-        [0x30, 0x02, 0x01], #Eabled Master Analog Power Control
-        [0x30, 0x7b, 0x01], #/Set the REF charding time to 40ms
-        [0x30, 0x0a, 0x40], #Full Chip Common Mode is 0.75V
+        [0x30, 0x00, 0x01],     # page1
+        [0x30, 0x09, 0x0f],     # Power up LOL and LOR drivers
+        [0x30, 0x0e, 0x08],     # Left DAC----LOL
+        [0x30, 0x0f, 0x08],     # Right DAC---LOR
+        [0x30, 0x12, 0x08],     # LOL driver gain is 8dB
+        [0x30, 0x13, 0x08],     # LOR driver gain is 8dB
+        [0x30, 0x01, 0x08],     # Disabled weak connection of AVDD with DVDD
+        [0x30, 0x02, 0x01],     # Eabled Master Analog Power Control
+        [0x30, 0x7b, 0x01],     # /Set the REF charding time to 40ms
+        [0x30, 0x0a, 0x40],     # Full Chip Common Mode is 0.75V
 
-        [0x30, 0x00, 0x00], #page0
-        [0x30, 0x40, 0x00], #Unmute the DAC digital volume control
-        [0x30, 0x41, 0x00],  #Left DAC volume control  0.0db
-        [0x30, 0x42, 0x00],  #Right DAC volume control  0.0db
-        [0x30, 0x44, 0x7f],  #Enable DRC
-        [0x30, 0x45, 0x00],  #DRC Hold Disabled
-        [0x30, 0x46, 0xe2],  #
+        [0x30, 0x00, 0x00],     # page0
+        [0x30, 0x40, 0x00],     # Unmute the DAC digital volume control
+        [0x30, 0x41, 0x00],     # Left DAC volume control  0.0db
+        [0x30, 0x42, 0x00],     # Right DAC volume control  0.0db
+        [0x30, 0x44, 0x7f],     # Enable DRC
+        [0x30, 0x45, 0x00],     # DRC Hold Disabled
+        [0x30, 0x46, 0xe2],     #
     ]
 
     # use this with minimal_dac for a beep test
