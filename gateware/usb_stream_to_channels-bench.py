@@ -3,7 +3,7 @@ from usb_stream_to_channels import USBStreamToChannels
 from nmigen.sim import Simulator, Tick
 
 if __name__ == "__main__":
-    dut = USBStreamToChannels(8)
+    dut = USBStreamToChannels(2)
 
     def send_one_frame(seamless=False, drop_ready=False):
         data = [n % 4 + (n//4 << 4) for n in range(32)]

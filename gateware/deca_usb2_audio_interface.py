@@ -8,7 +8,7 @@ from nmigen              import *
 from nmigen.lib.fifo     import AsyncFIFO
 from nmigen.lib.cdc      import FFSynchronizer
 
-from nmigen_library.stream            import connect_stream_to_fifo, connect_fifo_to_stream
+from nmigen_library.io.i2s            import I2STransmitter
 from nmigen_library.stream.i2c        import I2CStreamTransmitter
 from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
 from nmigen_library.utils             import EdgeToPulse, Timer
@@ -37,7 +37,7 @@ class USB2AudioInterface(Elaboratable):
     """ USB Audio Class v2 interface """
     NR_CHANNELS = 2
     MAX_PACKET_SIZE = 512 # NR_CHANNELS * 24 + 4
-    USE_ILA = True
+    USE_ILA = False
     ILA_MAX_PACKET_SIZE = 512
 
     def create_descriptors(self):
@@ -259,21 +259,38 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.car = platform.clock_domain_generator()
         m.submodules.audio_init = audio_init = AudioInit()
         i2c_audio_pads = platform.request("i2c_audio")
-        m.submodules.i2c = i2c = I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3), clk_stretch=False)
+        m.submodules.i2c = i2c = DomainRenamer("usb") \
+            (I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3), clk_stretch=False))
         m.submodules.audio_init_delay = audio_init_delay = \
             Timer(width=24, load=int(16e6), reload=0, allow_restart=False)
+        m.submodules.i2s_transmitter = i2s_transmitter = DomainRenamer("usb")(I2STransmitter(sample_width=24))
 
         audio = platform.request("audio")
+        debug = platform.request("debug")
+
         m.d.comb += [
+            # wire up DAC/ADC
             audio.mclk.eq(ClockSignal("audio")),
             audio.reset.eq(ResetSignal("audio")),
             audio.spi_select.eq(0), # choose i2c
             audio_init_delay.start.eq(1),
             audio_init.start.eq(audio_init_delay.done),
+
+            # wire up I2S transmitter
+            i2s_transmitter.word_select_in.eq(audio.wclk),
+            i2s_transmitter.serial_clock_in.eq(audio.bclk),
+            audio.din_mfp1.eq(i2s_transmitter.serial_data_out),
+
+            debug.bclk.eq(audio.bclk),
+            debug.wclk.eq(audio.wclk),
+            debug.adc.eq(audio.dout_mfp2),
+            debug.dac.eq(i2s_transmitter.serial_data_out),
         ]
 
-        #with m.If(~audio_init.done):
-        m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
+        with m.If(~audio_init.done):
+            m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
+        with m.Else():
+            m.d.comb += i2s_transmitter.enable_in.eq(1)
 
         # Create our USB-to-serial converter.
         ulpi = platform.request(platform.default_usb_connection)
@@ -386,33 +403,12 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.usb_to_channel_stream = usb_to_channel_stream = \
             DomainRenamer("usb")(USBStreamToChannels(self.NR_CHANNELS))
 
-        num_channels = Signal(range(self.NR_CHANNELS * 2), reset=2)
-        m.d.comb += usb_to_channel_stream.no_channels_in.eq(num_channels)
-
-        with m.Switch(class_request_handler.output_interface_altsetting_nr):
-            with m.Case(2):
-                m.d.usb += num_channels.eq(8)
-            with m.Default():
-                m.d.usb += num_channels.eq(2)
-
-        nr_channel_bits = Shape.cast(range(self.NR_CHANNELS)).width
-        m.submodules.usb_to_audio_fifo = usb_to_audio_fifo = \
-            AsyncFIFO(width=24 + nr_channel_bits + 2, depth=64, w_domain="usb", r_domain="sync")
+        m.d.comb += usb_to_channel_stream.no_channels_in.eq(self.NR_CHANNELS)
 
         m.d.comb += [
-            # wire USB to FIFO
+            # wire USB to I2S transmitter
             usb_to_channel_stream.usb_stream_in.stream_eq(ep1_out.stream),
-            *connect_stream_to_fifo(usb_to_channel_stream.channel_stream_out, usb_to_audio_fifo),
-
-            usb_to_audio_fifo.w_data[24:(24 + nr_channel_bits)]
-                .eq(usb_to_channel_stream.channel_stream_out.channel_no),
-
-            usb_to_audio_fifo.w_data[(24 + nr_channel_bits)]
-                .eq(usb_to_channel_stream.channel_stream_out.first),
-
-            usb_to_audio_fifo.w_data[(24 + nr_channel_bits + 1)]
-                .eq(usb_to_channel_stream.channel_stream_out.last),
-
+            i2s_transmitter.stream_in.stream_eq(usb_to_channel_stream.channel_stream_out),
         ]
 
         if self.USE_ILA:

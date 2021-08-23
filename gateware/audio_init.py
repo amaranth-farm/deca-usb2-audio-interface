@@ -142,6 +142,6 @@ class AudioInit(Elaboratable):
         ]
 
         with m.If(init_streamer.done):
-            m.d.sync += self.done.eq(1)
+            m.d.usb += self.done.eq(1)
 
         return m

@@ -11,7 +11,7 @@ class USBStreamToChannels(Elaboratable):
         # ports
         self.no_channels_in      = Signal(self._channel_bits + 1)
         self.usb_stream_in       = StreamInterface()
-        self.channel_stream_out  = StreamInterface(16, extra_fields=[("channel_no", self._channel_bits)])
+        self.channel_stream_out  = StreamInterface(24, extra_fields=[("channel_no", self._channel_bits)])
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
