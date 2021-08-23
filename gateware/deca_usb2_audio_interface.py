@@ -109,7 +109,7 @@ class USB2AudioInterface(Elaboratable):
         # default audio out device by Windows. We provide an alternate
         # setting with the full channel count, which also references
         # this terminal ID
-        inputTerminal.bNrChannels   = 2
+        inputTerminal.bNrChannels   = self.NR_CHANNELS
         inputTerminal.bCSourceID    = 1
         audioControlInterface.add_subordinate_descriptor(inputTerminal)
 
@@ -125,7 +125,7 @@ class USB2AudioInterface(Elaboratable):
         inputTerminal               = uac2.InputTerminalDescriptorEmitter()
         inputTerminal.bTerminalID   = 4
         inputTerminal.wTerminalType = uac2.InputTerminalTypes.MICROPHONE
-        inputTerminal.bNrChannels   = 8
+        inputTerminal.bNrChannels   = self.NR_CHANNELS
         inputTerminal.bCSourceID    = 1
         audioControlInterface.add_subordinate_descriptor(inputTerminal)
 
