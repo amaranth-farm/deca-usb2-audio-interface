@@ -3,7 +3,7 @@ from nmigen.build           import Platform
 from nmigen_library.stream  import StreamInterface
 
 class USBStreamToChannels(Elaboratable):
-    def __init__(self, max_nr_channels):
+    def __init__(self, max_nr_channels=2):
         # parameters
         self._max_nr_channels = max_nr_channels
         self._channel_bits    = Shape.cast(range(max_nr_channels)).width
