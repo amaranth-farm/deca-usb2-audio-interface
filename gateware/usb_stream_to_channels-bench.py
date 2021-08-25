@@ -14,10 +14,10 @@ if __name__ == "__main__":
             yield dut.usb_stream_in.payload.eq(byte)
             yield Tick()
             yield dut.usb_stream_in.first.eq(0)
-            if drop_valid and pos == 7 * 4 + 3:
-                yield dut.channel_stream_out.valid.eq(0)
+            if drop_valid and pos == 7 * 2 + 4:
+                yield dut.usb_stream_in.valid.eq(0)
                 for _ in range(4): yield Tick()
-                yield dut.channel_stream_out.valid.eq(1)
+                yield dut.usb_stream_in.valid.eq(1)
             if drop_ready and pos == 7 * 2 + 3:
                 yield dut.channel_stream_out.ready.eq(0)
                 for _ in range(7): yield Tick()
