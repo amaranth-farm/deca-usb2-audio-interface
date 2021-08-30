@@ -8,7 +8,7 @@ from nmigen              import *
 from nmigen.lib.fifo     import AsyncFIFO
 from nmigen.lib.cdc      import FFSynchronizer
 
-from nmigen_library.io.i2s            import I2STransmitter
+from nmigen_library.io.i2s            import I2STransmitter, I2SReceiver
 from nmigen_library.stream.i2c        import I2CStreamTransmitter
 from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
 from nmigen_library.utils             import EdgeToPulse, Timer
@@ -30,6 +30,7 @@ from luna.gateware.usb.usb2.endpoints.stream  import USBMultibyteStreamInEndpoin
 from luna.gateware.usb.usb2.request           import USBRequestHandler, StallOnlyRequestHandler
 
 from usb_stream_to_channels import USBStreamToChannels
+from channels_to_usb_stream import ChannelsToUSBStream
 from requesthandlers        import UAC2RequestHandlers
 from audio_init             import AudioInit
 
@@ -264,6 +265,7 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.audio_init_delay = audio_init_delay = \
             Timer(width=24, load=int(16e6), reload=0, allow_restart=False)
         m.submodules.i2s_transmitter = i2s_transmitter = DomainRenamer("usb")(I2STransmitter(sample_width=24))
+        m.submodules.i2s_receiver    = i2s_receiver    = DomainRenamer("usb")(I2SReceiver(sample_width=24))
 
         audio = platform.request("audio")
         debug = platform.request("debug")
@@ -281,6 +283,11 @@ class USB2AudioInterface(Elaboratable):
             i2s_transmitter.serial_clock_in.eq(audio.bclk),
             audio.din_mfp1.eq(i2s_transmitter.serial_data_out),
 
+            # wire up I2S receiver
+            i2s_receiver.word_select_in.eq(audio.wclk),
+            i2s_receiver.serial_clock_in.eq(audio.bclk),
+            i2s_receiver.serial_data_in.eq(audio.dout_mfp2),
+
             debug.bclk.eq(audio.bclk),
             debug.wclk.eq(audio.wclk),
             debug.adc.eq(audio.dout_mfp2),
@@ -290,7 +297,10 @@ class USB2AudioInterface(Elaboratable):
         with m.If(~audio_init.done):
             m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
         with m.Else():
-            m.d.comb += i2s_transmitter.enable_in.eq(1)
+            m.d.comb += [
+                i2s_transmitter.enable_in.eq(1),
+                i2s_receiver.enable_in.eq(1),
+            ]
 
         # Create our USB-to-serial converter.
         ulpi = platform.request(platform.default_usb_connection)
@@ -325,7 +335,7 @@ class USB2AudioInterface(Elaboratable):
             max_packet_size=4)
         usb.add_endpoint(ep1_in)
 
-        ep2_in = USBIsochronousInMemoryEndpoint(
+        ep2_in = USBIsochronousInStreamEndpoint(
             endpoint_number=2, # EP 2 IN
             max_packet_size=self.MAX_PACKET_SIZE)
         usb.add_endpoint(ep2_in)
@@ -397,18 +407,22 @@ class USB2AudioInterface(Elaboratable):
         m.d.comb += [
             bitPos.eq(ep1_in.address << 3),
             ep1_in.value.eq(0xff & (feedbackValue >> bitPos)),
-            ep2_in.value.eq(ep2_in.address),
         ]
 
         m.submodules.usb_to_channel_stream = usb_to_channel_stream = \
             DomainRenamer("usb")(USBStreamToChannels(self.NR_CHANNELS))
 
-        m.d.comb += usb_to_channel_stream.no_channels_in.eq(self.NR_CHANNELS)
+        m.submodules.channels_to_usb_stream = channels_to_usb_stream = \
+            DomainRenamer("usb")(ChannelsToUSBStream(self.NR_CHANNELS))
 
         m.d.comb += [
             # wire USB to I2S transmitter
             usb_to_channel_stream.usb_stream_in.stream_eq(ep1_out.stream),
             i2s_transmitter.stream_in.stream_eq(usb_to_channel_stream.channel_stream_out),
+            # wire I2S receiver to USB
+            channels_to_usb_stream.channel_stream_in.stream_eq(i2s_receiver.stream_out),
+            channels_to_usb_stream.channel_stream_in.channel_no.eq(~i2s_receiver.stream_out.first),
+            ep2_in.stream.stream_eq(channels_to_usb_stream.usb_stream_out),
         ]
 
         if self.USE_ILA:
@@ -416,15 +430,11 @@ class USB2AudioInterface(Elaboratable):
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
             signals = [
-                #i2c_audio_pads.sda,
-                #i2c_audio_pads.scl,
-                audio_init.start,
-                audio_init.done,
-                i2c.stream_in.valid,
-                i2c.stream_in.ready,
-                i2c.stream_in.payload,
-                i2c.stream_in.first,
-                i2c.stream_in.last,
+                i2s_receiver.stream_out.payload,
+                i2s_receiver.stream_out.ready,
+                i2s_receiver.stream_out.valid,
+                i2s_receiver.stream_out.first,
+                i2s_receiver.stream_out.last,
             ]
 
             signals_bits = sum([s.width for s in signals])
@@ -445,7 +455,7 @@ class USB2AudioInterface(Elaboratable):
 
             m.d.comb += [
                 stream_ep.stream.stream_eq(ila.stream),
-                ila.trigger.eq(audio_init_delay.done),
+                ila.trigger.eq(i2s_receiver.stream_out.valid),
             ]
 
             ILACoreParameters(ila).pickle()
