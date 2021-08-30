@@ -344,10 +344,10 @@ class USB2AudioInterface(Elaboratable):
         audio_in_frame_bytes = Signal(range(self.MAX_PACKET_SIZE), reset=24 * self.NR_CHANNELS)
         audio_in_frame_bytes_counting = Signal()
 
-        with m.If(audio_in_frame_bytes_counting):
-            m.d.usb += audio_in_frame_bytes.eq(audio_in_frame_bytes + 1)
-
         with m.If(ep1_out.stream.valid & ep1_out.stream.ready):
+            with m.If(audio_in_frame_bytes_counting):
+                m.d.usb += audio_in_frame_bytes.eq(audio_in_frame_bytes + 1)
+
             with m.If(ep1_out.stream.first):
                 m.d.usb += [
                     audio_in_frame_bytes.eq(1),
@@ -430,21 +430,22 @@ class USB2AudioInterface(Elaboratable):
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
             signals = [
-                i2s_receiver.stream_out.payload,
-                i2s_receiver.stream_out.ready,
-                i2s_receiver.stream_out.valid,
-                i2s_receiver.stream_out.first,
-                i2s_receiver.stream_out.last,
+                ep1_out.stream.ready,
+                ep1_out.stream.valid,
+                ep1_out.stream.first,
+                ep1_out.stream.last,
+                audio_in_frame_bytes_counting,
+                audio_in_frame_bytes,
             ]
 
             signals_bits = sum([s.width for s in signals])
-            depth = 4 * 8 * 1024 #int(33*8*1024/signals_bits)
+            depth = 3 * 8 * 1024 #int(33*8*1024/signals_bits)
             m.submodules.ila = ila = \
                 StreamILA(
                     signals=signals,
                     sample_depth=depth,
                     domain="usb", o_domain="usb",
-                    samples_pretrigger=32)
+                    samples_pretrigger=1024)
 
             stream_ep = USBMultibyteStreamInEndpoint(
                 endpoint_number=3, # EP 3 IN
@@ -455,7 +456,7 @@ class USB2AudioInterface(Elaboratable):
 
             m.d.comb += [
                 stream_ep.stream.stream_eq(ila.stream),
-                ila.trigger.eq(i2s_receiver.stream_out.valid),
+                ila.trigger.eq(audio_in_frame_bytes_counting & ~(ep1_out.stream.ready & ep1_out.stream.valid)),
             ]
 
             ILACoreParameters(ila).pickle()
