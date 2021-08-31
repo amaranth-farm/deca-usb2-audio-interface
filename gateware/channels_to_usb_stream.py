@@ -86,7 +86,6 @@ class ChannelsToUSBStream(Elaboratable):
                         m.d.comb += channel_ready.eq(1)
                         m.d.sync += [
                             current_sample.eq(channel_payload << shift),
-                            current_channel.eq(0),
                         ]
                         m.next = "SEND"
 
