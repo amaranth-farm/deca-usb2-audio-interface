@@ -74,7 +74,7 @@ class ArrowDECAPlatform(IntelPlatform, LUNAPlatform):
 
     clock_domain_generator = ArrowDECAClockAndResetController
     default_usb_connection = "ulpi"
-    ignore_phy_vbus = True
+    ignore_phy_vbus = False
 
     resources   = [
         Resource("clk50", 0, Pins("M8", dir="i"),
