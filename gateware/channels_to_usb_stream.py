@@ -45,6 +45,8 @@ class ChannelsToUSBStream(Elaboratable):
 
         with m.If(out_fifo.w_rdy):
             with m.FSM() as fsm:
+                current_channel_next = (current_channel + 1)[:self._channel_bits]
+
                 with m.State("WAIT-FIRST"):
                     # we have to accept data until we find a first channel sample
                     m.d.comb += channel_ready.eq(1)
@@ -69,7 +71,6 @@ class ChannelsToUSBStream(Elaboratable):
                         with m.If(channel_valid):
                             m.d.comb += channel_ready.eq(1)
 
-                            current_channel_next = (current_channel + 1)[:self._channel_bits]
                             m.d.sync += current_channel.eq(current_channel_next)
 
                             with m.If(current_channel_next == channel_stream.channel_no):
@@ -86,6 +87,7 @@ class ChannelsToUSBStream(Elaboratable):
                         m.d.comb += channel_ready.eq(1)
                         m.d.sync += [
                             current_sample.eq(channel_payload << shift),
+                            current_channel.eq(current_channel_next),
                         ]
                         m.next = "SEND"
 
