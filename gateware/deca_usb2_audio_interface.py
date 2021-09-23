@@ -74,7 +74,7 @@ class USB2AudioInterface(Elaboratable):
 
             if self.USE_ILA:
                 with configDescr.InterfaceDescriptor() as i:
-                    i.bInterfaceNumber = 3
+                    i.bInterfaceNumber = 2
 
                     with i.EndpointDescriptor() as e:
                         e.bEndpointAddress = USBDirection.IN.to_endpoint_address(3) # EP 3 IN
@@ -310,20 +310,24 @@ class USB2AudioInterface(Elaboratable):
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
             signals = [
+                sof_wrap,
                 ep1_out.stream.ready,
                 ep1_out.stream.valid,
                 ep1_out.stream.first,
                 ep1_out.stream.last,
+                audio_clock_usb,
+                wclk,
+                i2s_transmitter.serial_data_out,
             ]
 
-            signals_bits = sum([s.width for s in signals])
+            #signals_bits = sum([s.width for s in signals])
             depth = 3 * 8 * 1024 #int(33*8*1024/signals_bits)
             m.submodules.ila = ila = \
                 StreamILA(
                     signals=signals,
                     sample_depth=depth,
                     domain="usb", o_domain="usb",
-                    samples_pretrigger=1024)
+                    samples_pretrigger=64)
 
             stream_ep = USBMultibyteStreamInEndpoint(
                 endpoint_number=3, # EP 3 IN
