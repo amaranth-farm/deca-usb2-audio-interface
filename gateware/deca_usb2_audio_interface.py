@@ -5,34 +5,28 @@
 import os
 
 from nmigen              import *
-from nmigen.lib.fifo     import AsyncFIFO
 from nmigen.lib.cdc      import FFSynchronizer
 
-from nmigen_library.io.i2s            import I2STransmitter, I2SReceiver
-from nmigen_library.stream.i2c        import I2CStreamTransmitter
+from nmigen_library.io.i2s            import I2STransmitter
 from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
-from nmigen_library.utils             import EdgeToPulse, Timer
+from nmigen_library.utils             import EdgeToPulse
 
 
 from luna                import top_level_cli
-from luna.usb2           import USBDevice, USBIsochronousInMemoryEndpoint, USBIsochronousOutStreamEndpoint, USBIsochronousInStreamEndpoint
+from luna.usb2           import USBDevice, USBIsochronousInMemoryEndpoint, USBIsochronousOutStreamEndpoint
 
 #from luna.gateware.usb.usb2.endpoints.isochronous import USBIsochronousOutRawStreamEndpoint
 
-from usb_protocol.types                       import USBRequestType, USBRequestRecipient, USBTransferType, USBSynchronizationType, USBUsageType, USBDirection, USBStandardRequests
-from usb_protocol.types.descriptors.uac2      import AudioClassSpecificRequestCodes
+from usb_protocol.types                       import USBRequestType, USBTransferType, USBSynchronizationType, USBUsageType, USBDirection, USBStandardRequests
 from usb_protocol.emitters                    import DeviceDescriptorCollection
 from usb_protocol.emitters.descriptors        import uac2, standard
 
-from luna.gateware.platform                   import NullPin
 from luna.gateware.usb.usb2.device            import USBDevice
 from luna.gateware.usb.usb2.endpoints.stream  import USBMultibyteStreamInEndpoint
 from luna.gateware.usb.usb2.request           import USBRequestHandler, StallOnlyRequestHandler
 
 from usb_stream_to_channels import USBStreamToChannels
-from channels_to_usb_stream import ChannelsToUSBStream
 from requesthandlers        import UAC2RequestHandlers
-from audio_init             import AudioInit
 
 class USB2AudioInterface(Elaboratable):
     """ USB Audio Class v2 interface """
@@ -52,11 +46,11 @@ class USB2AudioInterface(Elaboratable):
             d.bDeviceSubclass    = 0x02
             d.bDeviceProtocol    = 0x01
             d.idVendor           = 0x1209
-            d.idProduct          = 0x4711
+            d.idProduct          = 0xDECA
 
             d.iManufacturer      = "OpenAudioGear"
-            d.iProduct           = "DECAface"
-            d.iSerialNumber      = "4711"
+            d.iProduct           = "DACface"
+            d.iSerialNumber      = "0001"
             d.bcdDevice          = 0.01
 
             d.bNumConfigurations = 1
@@ -64,7 +58,7 @@ class USB2AudioInterface(Elaboratable):
         with descriptors.ConfigurationDescriptor() as configDescr:
             # Interface Association
             interfaceAssociationDescriptor                 = uac2.InterfaceAssociationDescriptorEmitter()
-            interfaceAssociationDescriptor.bInterfaceCount = 3 # Audio Control + Inputs + Outputs
+            interfaceAssociationDescriptor.bInterfaceCount = 2 # Audio Control + Inputs + Outputs
             configDescr.add_subordinate_descriptor(interfaceAssociationDescriptor)
 
             # Interface Descriptor (Control)
@@ -77,8 +71,6 @@ class USB2AudioInterface(Elaboratable):
             configDescr.add_subordinate_descriptor(audioControlInterface)
 
             self.create_output_channels_descriptor(configDescr)
-
-            self.create_input_channels_descriptor(configDescr)
 
             if self.USE_ILA:
                 with configDescr.InterfaceDescriptor() as i:
@@ -101,7 +93,6 @@ class USB2AudioInterface(Elaboratable):
         clockSource.bmControls   = uac2.ClockFrequencyControl.HOST_READ_ONLY
         audioControlInterface.add_subordinate_descriptor(clockSource)
 
-
         # streaming input port from the host to the USB interface
         inputTerminal               = uac2.InputTerminalDescriptorEmitter()
         inputTerminal.bTerminalID   = 2
@@ -119,22 +110,6 @@ class USB2AudioInterface(Elaboratable):
         outputTerminal.bTerminalID   = 3
         outputTerminal.wTerminalType = uac2.OutputTerminalTypes.SPEAKER
         outputTerminal.bSourceID     = 2
-        outputTerminal.bCSourceID    = 1
-        audioControlInterface.add_subordinate_descriptor(outputTerminal)
-
-        # audio input port from the outside world to the USB interface
-        inputTerminal               = uac2.InputTerminalDescriptorEmitter()
-        inputTerminal.bTerminalID   = 4
-        inputTerminal.wTerminalType = uac2.InputTerminalTypes.MICROPHONE
-        inputTerminal.bNrChannels   = self.NR_CHANNELS
-        inputTerminal.bCSourceID    = 1
-        audioControlInterface.add_subordinate_descriptor(inputTerminal)
-
-        # audio output port from the USB interface to the host
-        outputTerminal               = uac2.OutputTerminalDescriptorEmitter()
-        outputTerminal.bTerminalID   = 5
-        outputTerminal.wTerminalType = uac2.USBTerminalTypes.USB_STREAMING
-        outputTerminal.bSourceID     = 4
         outputTerminal.bCSourceID    = 1
         audioControlInterface.add_subordinate_descriptor(outputTerminal)
 
@@ -202,105 +177,39 @@ class USB2AudioInterface(Elaboratable):
         # and use this audio interface
         self.create_output_streaming_interface(c, nr_channels=self.NR_CHANNELS, alt_setting_nr=1)
 
-
-    def create_input_streaming_interface(self, c, *, nr_channels, alt_setting_nr, channel_config=0):
-        # Interface Descriptor (Streaming, IN, active setting)
-        activeAudioStreamingInterface = uac2.AudioStreamingInterfaceDescriptorEmitter()
-        activeAudioStreamingInterface.bInterfaceNumber  = 2
-        activeAudioStreamingInterface.bAlternateSetting = alt_setting_nr
-        activeAudioStreamingInterface.bNumEndpoints     = 1
-        c.add_subordinate_descriptor(activeAudioStreamingInterface)
-
-        # AudioStreaming Interface Descriptor (General)
-        audioStreamingInterface                 = uac2.ClassSpecificAudioStreamingInterfaceDescriptorEmitter()
-        audioStreamingInterface.bTerminalLink   = 5
-        audioStreamingInterface.bFormatType     = uac2.FormatTypes.FORMAT_TYPE_I
-        audioStreamingInterface.bmFormats       = uac2.TypeIFormats.PCM
-        audioStreamingInterface.bNrChannels     = nr_channels
-        audioStreamingInterface.bmChannelConfig = channel_config
-        c.add_subordinate_descriptor(audioStreamingInterface)
-
-        # AudioStreaming Interface Descriptor (Type I)
-        typeIStreamingInterface  = uac2.TypeIFormatTypeDescriptorEmitter()
-        typeIStreamingInterface.bSubslotSize   = 4
-        typeIStreamingInterface.bBitResolution = 24 # we use all 24 bits
-        c.add_subordinate_descriptor(typeIStreamingInterface)
-
-        # Endpoint Descriptor (Audio out)
-        audioOutEndpoint = standard.EndpointDescriptorEmitter()
-        audioOutEndpoint.bEndpointAddress     = USBDirection.IN.to_endpoint_address(2) # EP 2 IN
-        audioOutEndpoint.bmAttributes         = USBTransferType.ISOCHRONOUS  | \
-                                                (USBSynchronizationType.ASYNC << 2) | \
-                                                (USBUsageType.DATA << 4)
-        audioOutEndpoint.wMaxPacketSize = self.MAX_PACKET_SIZE
-        audioOutEndpoint.bInterval      = 1
-        c.add_subordinate_descriptor(audioOutEndpoint)
-
-        # AudioControl Endpoint Descriptor
-        audioControlEndpoint = uac2.ClassSpecificAudioStreamingIsochronousAudioDataEndpointDescriptorEmitter()
-        c.add_subordinate_descriptor(audioControlEndpoint)
-
-
-    def create_input_channels_descriptor(self, c):
-        #
-        # Interface Descriptor (Streaming, IN, quiet setting)
-        #
-        quietAudioStreamingInterface = uac2.AudioStreamingInterfaceDescriptorEmitter()
-        quietAudioStreamingInterface.bInterfaceNumber  = 2
-        quietAudioStreamingInterface.bAlternateSetting = 0
-        c.add_subordinate_descriptor(quietAudioStreamingInterface)
-
-        # Windows wants a stereo pair as default setting, so let's have it
-        self.create_input_streaming_interface(c, nr_channels=self.NR_CHANNELS, alt_setting_nr=1, channel_config=0x3)
-
     def elaborate(self, platform):
         m = Module()
 
         # Generate our domain clocks/resets.
         m.submodules.car = platform.clock_domain_generator()
-        m.submodules.audio_init = audio_init = AudioInit()
-        i2c_audio_pads = platform.request("i2c_audio")
-        m.submodules.i2c = i2c = DomainRenamer("usb") \
-            (I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3), clk_stretch=False))
-        m.submodules.audio_init_delay = audio_init_delay = \
-            Timer(width=24, load=int(16e6), reload=0, allow_restart=False)
         m.submodules.i2s_transmitter = i2s_transmitter = DomainRenamer("usb")(I2STransmitter(sample_width=24))
-        m.submodules.i2s_receiver    = i2s_receiver    = DomainRenamer("usb")(I2SReceiver(sample_width=24))
 
-        audio = platform.request("audio")
-        debug = platform.request("debug")
+        i2s = platform.request("i2s")
+        #debug = platform.request("debug")
+
+        # divide bitclock to get word clock
+        # each half cycle has 32 bits in it
+        wclk        = Signal()
+        bit_counter = Signal(5)
+        m.d.sound += bit_counter.eq(bit_counter + 1)
+        with m.If(bit_counter == 0):
+            m.d.sound += wclk.eq(~wclk)
 
         m.d.comb += [
             # wire up DAC/ADC
-            audio.mclk.eq(ClockSignal("audio")),
-            audio.reset.eq(ResetSignal("audio")),
-            audio.spi_select.eq(0), # choose i2c
-            audio_init_delay.start.eq(1),
-            audio_init.start.eq(audio_init_delay.done),
+            i2s.bclk.eq(ClockSignal("sound")),
+            i2s.wclk.eq(wclk),
+            i2s.data.eq(i2s_transmitter.serial_data_out),
+            i2s_transmitter.enable_in.eq(1),
 
             # wire up I2S transmitter
-            i2s_transmitter.word_select_in.eq(audio.wclk),
-            i2s_transmitter.serial_clock_in.eq(audio.bclk),
-            audio.din_mfp1.eq(i2s_transmitter.serial_data_out),
+            i2s_transmitter.word_select_in.eq(i2s.wclk),
+            i2s_transmitter.serial_clock_in.eq(i2s.bclk),
 
-            # wire up I2S receiver
-            i2s_receiver.word_select_in.eq(audio.wclk),
-            i2s_receiver.serial_clock_in.eq(audio.bclk),
-            i2s_receiver.serial_data_in.eq(audio.dout_mfp2),
-
-            debug.bclk.eq(audio.bclk),
-            debug.wclk.eq(audio.wclk),
-            debug.adc.eq(audio.dout_mfp2),
-            debug.dac.eq(i2s_transmitter.serial_data_out),
+            #debug.bclk.eq(i2s.bclk),
+            #debug.wclk.eq(i2s.wclk),
+            #debug.dac.eq(i2s_transmitter.serial_data_out),
         ]
-
-        with m.If(~audio_init.done):
-            m.d.comb += i2c.stream_in.stream_eq(audio_init.stream_out)
-        with m.Else():
-            m.d.comb += [
-                i2s_transmitter.enable_in.eq(1),
-                i2s_receiver.enable_in.eq(1),
-            ]
 
         # Create our USB-to-serial converter.
         ulpi = platform.request(platform.default_usb_connection)
@@ -335,31 +244,9 @@ class USB2AudioInterface(Elaboratable):
             max_packet_size=4)
         usb.add_endpoint(ep1_in)
 
-        ep2_in = USBIsochronousInStreamEndpoint(
-            endpoint_number=2, # EP 2 IN
-            max_packet_size=self.MAX_PACKET_SIZE)
-        usb.add_endpoint(ep2_in)
-
-        # calculate bytes in frame for audio in
-        audio_in_frame_bytes = Signal(range(self.MAX_PACKET_SIZE), reset=24 * self.NR_CHANNELS)
-        audio_in_frame_bytes_counting = Signal()
-
-        with m.If(ep1_out.stream.valid & ep1_out.stream.ready):
-            with m.If(audio_in_frame_bytes_counting):
-                m.d.usb += audio_in_frame_bytes.eq(audio_in_frame_bytes + 1)
-
-            with m.If(ep1_out.stream.first):
-                m.d.usb += [
-                    audio_in_frame_bytes.eq(1),
-                    audio_in_frame_bytes_counting.eq(1),
-                ]
-            with m.Elif(ep1_out.stream.last):
-                m.d.usb += audio_in_frame_bytes_counting.eq(0)
-
         # Connect our device as a high speed device
         m.d.comb += [
             ep1_in.bytes_in_frame.eq(4),
-            ep2_in.bytes_in_frame.eq(audio_in_frame_bytes),
             usb.connect          .eq(1),
             usb.full_speed_only  .eq(0),
         ]
@@ -377,7 +264,7 @@ class USB2AudioInterface(Elaboratable):
         sof_counter         = Signal(5)
 
         audio_clock_usb = Signal()
-        m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("audio"), audio_clock_usb, o_domain="usb")
+        m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("sound"), audio_clock_usb, o_domain="usb")
         m.submodules.audio_clock_usb_pulse = audio_clock_usb_pulse = DomainRenamer("usb")(EdgeToPulse())
         audio_clock_tick = Signal()
         m.d.usb += [
@@ -395,12 +282,12 @@ class USB2AudioInterface(Elaboratable):
             # we need 2**13 / 2**8 = 2**5 = 32 SOF-frames of
             # sample master frequency counter to get enough
             # precision for the sample frequency estimate
-            # / 2**8 because the ADAT-clock = 256 times = 2**8
+            # / 2**6 because the sound-clock = 64 times = 2**6
             # the sample frequency and sof_counter is 5 bits
             # so it wraps automatically every 32 SOFs
             with m.If(sof_counter == 0):
                 m.d.usb += [
-                    feedbackValue.eq(audio_clock_counter << 3),
+                    feedbackValue.eq(audio_clock_counter << 5),
                     audio_clock_counter.eq(0),
                 ]
 
@@ -412,17 +299,10 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.usb_to_channel_stream = usb_to_channel_stream = \
             DomainRenamer("usb")(USBStreamToChannels(self.NR_CHANNELS))
 
-        m.submodules.channels_to_usb_stream = channels_to_usb_stream = \
-            DomainRenamer("usb")(ChannelsToUSBStream(self.NR_CHANNELS))
-
         m.d.comb += [
             # wire USB to I2S transmitter
             usb_to_channel_stream.usb_stream_in.stream_eq(ep1_out.stream),
             i2s_transmitter.stream_in.stream_eq(usb_to_channel_stream.channel_stream_out),
-            # wire I2S receiver to USB
-            channels_to_usb_stream.channel_stream_in.stream_eq(i2s_receiver.stream_out),
-            channels_to_usb_stream.channel_stream_in.channel_no.eq(~i2s_receiver.stream_out.first),
-            ep2_in.stream.stream_eq(channels_to_usb_stream.usb_stream_out),
         ]
 
         if self.USE_ILA:
@@ -434,8 +314,6 @@ class USB2AudioInterface(Elaboratable):
                 ep1_out.stream.valid,
                 ep1_out.stream.first,
                 ep1_out.stream.last,
-                audio_in_frame_bytes_counting,
-                audio_in_frame_bytes,
             ]
 
             signals_bits = sum([s.width for s in signals])
@@ -456,12 +334,12 @@ class USB2AudioInterface(Elaboratable):
 
             m.d.comb += [
                 stream_ep.stream.stream_eq(ila.stream),
-                ila.trigger.eq(audio_in_frame_bytes_counting & ~(ep1_out.stream.ready & ep1_out.stream.valid)),
+                ila.trigger.eq(~(ep1_out.stream.ready & ep1_out.stream.valid)),
             ]
 
             ILACoreParameters(ila).pickle()
 
-        leds = Cat([platform.request("led", i) for i in range(8)])
+        leds = Cat([platform.request("led", i) for i in range(4)])
         m.d.comb += [
             leds[0].eq(usb.tx_activity_led),
             leds[1].eq(usb.rx_activity_led),
@@ -472,5 +350,5 @@ class USB2AudioInterface(Elaboratable):
         return m
 
 if __name__ == "__main__":
-    os.environ["LUNA_PLATFORM"] = "arrow_deca:ArrowDECAPlatform"
+    os.environ["LUNA_PLATFORM"] = "qmtech_10cl006_platform:USBSoundCardPlatform"
     top_level_cli(USB2AudioInterface)

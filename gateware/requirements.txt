@@ -1,3 +1,4 @@
 git+https://github.com/nmigen/nmigen.git
+git+https://github.com/hansfbaier/nmigen-boards.git
 git+https://github.com/hansfbaier/usb2-highspeed-core.git
 git+https://github.com/hansfbaier/nmigen-library.git
