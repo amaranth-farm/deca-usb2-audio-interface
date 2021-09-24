@@ -189,22 +189,25 @@ class USB2AudioInterface(Elaboratable):
 
         # divide bitclock to get word clock
         # each half cycle has 32 bits in it
-        wclk        = Signal()
+        wclk        = Signal(reset=1)
         bit_counter = Signal(6)
         m.d.sound += bit_counter.eq(bit_counter + 1)
         m.d.comb  += wclk.eq(bit_counter[-1])
 
         m.d.comb += [
             # wire up DAC/ADC
-            i2s.sclk.eq(ClockSignal("soundfast")),
-            i2s.bclk.eq(ClockSignal("sound")),
+            # in I2S, everything happens on the negedge
+            # the easiest way to achieve this, is to invert
+            # the clock signal
+            i2s.sclk.eq(~ClockSignal("soundfast")),
+            i2s.bclk.eq(~ClockSignal("sound")),
             i2s.wclk.eq(wclk),
             i2s.data.eq(i2s_transmitter.serial_data_out),
             i2s_transmitter.enable_in.eq(1),
 
             # wire up I2S transmitter
             i2s_transmitter.word_select_in.eq(wclk),
-            i2s_transmitter.serial_clock_in.eq(ClockSignal("sound")),
+            i2s_transmitter.serial_clock_in.eq(~ClockSignal("sound")),
 
             #debug.bclk.eq(i2s.bclk),
             #debug.wclk.eq(i2s.wclk),
