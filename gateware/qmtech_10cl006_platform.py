@@ -14,10 +14,11 @@ class USBSoundCardClockDomainGenerator(Elaboratable):
         m = Module()
 
         # Create our domains
-        m.domains.usb   = ClockDomain("usb")
-        m.domains.sync  = ClockDomain("sync")
-        m.domains.fast  = ClockDomain("fast")
-        m.domains.sound = ClockDomain("sound")
+        m.domains.usb       = ClockDomain("usb")
+        m.domains.sync      = ClockDomain("sync")
+        m.domains.fast      = ClockDomain("fast")
+        m.domains.sound     = ClockDomain("sound")
+        m.domains.soundfast = ClockDomain("soundfast")
 
         clk = platform.request(platform.default_clk)
 
@@ -26,7 +27,7 @@ class USBSoundCardClockDomainGenerator(Elaboratable):
 
         sys_locked   = Signal()
         sound_locked = Signal()
-        reset       = Signal()
+        reset        = Signal()
 
         m.submodules.mainpll = Instance("ALTPLL",
             p_BANDWIDTH_TYPE         = "AUTO",
@@ -60,6 +61,12 @@ class USBSoundCardClockDomainGenerator(Elaboratable):
             p_CLK0_MULTIPLY_BY       = 17,
             p_CLK0_PHASE_SHIFT       = 0,
 
+            # sound clock = 12.288 MHz = 48 kHz * 32 bit * 2 channels * 4
+            p_CLK1_DIVIDE_BY         = 83,
+            p_CLK1_DUTY_CYCLE        = 50,
+            p_CLK1_MULTIPLY_BY       = 17,
+            p_CLK1_PHASE_SHIFT       = 0,
+
             p_INCLK0_INPUT_FREQUENCY = 16667,
             p_OPERATION_MODE         = "NORMAL",
 
@@ -70,14 +77,16 @@ class USBSoundCardClockDomainGenerator(Elaboratable):
 
         m.d.comb += [
             reset.eq(~(sys_locked & sound_locked)),
-            ClockSignal("fast").eq(sys_clocks[0]),
-            ClockSignal("usb") .eq(sys_clocks[1]),
-            ClockSignal("sync").eq(sys_clocks[1]),
-            ClockSignal("sound").eq(sound_clocks[0]),
-            ResetSignal("fast").eq(reset),
-            ResetSignal("usb") .eq(reset),
-            ResetSignal("sync").eq(reset),
-            ResetSignal("sound").eq(reset),
+            ClockSignal("fast")      .eq(sys_clocks[0]),
+            ClockSignal("usb")       .eq(sys_clocks[1]),
+            ClockSignal("sync")      .eq(sys_clocks[1]),
+            ClockSignal("sound")     .eq(sound_clocks[0]),
+            ClockSignal("soundfast") .eq(sound_clocks[1]),
+            ResetSignal("fast")      .eq(reset),
+            ResetSignal("usb")       .eq(reset),
+            ResetSignal("sync")      .eq(reset),
+            ResetSignal("sound")     .eq(reset),
+            ResetSignal("soundfast") .eq(reset),
         ]
 
         return m
@@ -117,9 +126,10 @@ class USBSoundCardPlatform(QMTech10CL006Platform, LUNAPlatform):
                 Attrs(io_standard="3.3-V LVCMOS")),
 
             Resource("i2s", 0,
-                Subsignal("data",  Pins("J_2:51", dir="o")),
-                Subsignal("bclk",  Pins("J_2:53", dir="o")),
-                Subsignal("wclk",  Pins("J_2:55", dir="o")),
+                Subsignal("sclk",  Pins("J_3:43", dir="o")),
+                Subsignal("bclk",  Pins("J_3:45", dir="o")),
+                Subsignal("data",  Pins("J_3:47", dir="o")),
+                Subsignal("wclk",  Pins("J_3:49", dir="o")),
                 Attrs(io_standard="3.3-V LVCMOS"))
         ]
 

@@ -190,21 +190,21 @@ class USB2AudioInterface(Elaboratable):
         # divide bitclock to get word clock
         # each half cycle has 32 bits in it
         wclk        = Signal()
-        bit_counter = Signal(5)
+        bit_counter = Signal(6)
         m.d.sound += bit_counter.eq(bit_counter + 1)
-        with m.If(bit_counter == 0):
-            m.d.sound += wclk.eq(~wclk)
+        m.d.comb  += wclk.eq(bit_counter[-1])
 
         m.d.comb += [
             # wire up DAC/ADC
+            i2s.sclk.eq(ClockSignal("soundfast")),
             i2s.bclk.eq(ClockSignal("sound")),
             i2s.wclk.eq(wclk),
             i2s.data.eq(i2s_transmitter.serial_data_out),
             i2s_transmitter.enable_in.eq(1),
 
             # wire up I2S transmitter
-            i2s_transmitter.word_select_in.eq(i2s.wclk),
-            i2s_transmitter.serial_clock_in.eq(i2s.bclk),
+            i2s_transmitter.word_select_in.eq(wclk),
+            i2s_transmitter.serial_clock_in.eq(ClockSignal("sound")),
 
             #debug.bclk.eq(i2s.bclk),
             #debug.wclk.eq(i2s.wclk),
@@ -264,7 +264,7 @@ class USB2AudioInterface(Elaboratable):
         sof_counter         = Signal(5)
 
         audio_clock_usb = Signal()
-        m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("sound"), audio_clock_usb, o_domain="usb")
+        m.submodules.audio_clock_usb_sync = FFSynchronizer(ClockSignal("soundfast"), audio_clock_usb, o_domain="usb")
         m.submodules.audio_clock_usb_pulse = audio_clock_usb_pulse = DomainRenamer("usb")(EdgeToPulse())
         audio_clock_tick = Signal()
         m.d.usb += [
@@ -282,12 +282,12 @@ class USB2AudioInterface(Elaboratable):
             # we need 2**13 / 2**8 = 2**5 = 32 SOF-frames of
             # sample master frequency counter to get enough
             # precision for the sample frequency estimate
-            # / 2**6 because the sound-clock = 64 times = 2**6
+            # / 2**8 because the sound-clock = 256 times = 2**8
             # the sample frequency and sof_counter is 5 bits
             # so it wraps automatically every 32 SOFs
             with m.If(sof_counter == 0):
                 m.d.usb += [
-                    feedbackValue.eq(audio_clock_counter << 5),
+                    feedbackValue.eq(audio_clock_counter << 3),
                     audio_clock_counter.eq(0),
                 ]
 
