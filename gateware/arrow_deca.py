@@ -127,6 +127,8 @@ class ArrowDECAPlatform(IntelPlatform, LUNAPlatform):
             Attrs(io_standard="3.3-V LVCMOS")
         ),
 
+        SPIResource(0, clk="P_9:11", copi="P_9:13", cipo=None, cs_n="P_9:15", attrs=Attrs(io_standard="3.3-V LVCMOS")),
+
         Resource("audio", 0,
             Subsignal("reset",      PinsN("M21", dir="o")),
             Subsignal("mclk",       Pins ("P14", dir="o")),
