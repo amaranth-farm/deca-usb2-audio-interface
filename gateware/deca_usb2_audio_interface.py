@@ -290,7 +290,7 @@ class USB2AudioInterface(Elaboratable):
             # so it wraps automatically every 32 SOFs
             with m.If(sof_counter == 0):
                 m.d.usb += [
-                    feedbackValue.eq(audio_clock_counter << 3),
+                    feedbackValue.eq((audio_clock_counter + 1) << 3),
                     audio_clock_counter.eq(0),
                 ]
 
