@@ -122,7 +122,7 @@ class USBSoundCardPlatform(QMTech10CL006Platform, LUNAPlatform):
                 dir="J_2:11", nxt="J_2:13", stp="J_2:9", rst="J_2:8", rst_invert=True, # USB3320 reset is active low
                 attrs=Attrs(io_standard="3.3-V LVCMOS")),
 
-            Resource("debug_led", 0, PinsN("J_2:39 J_2:38 J_2:37 J_2:36", dir="o"),
+            Resource("debug_led", 0, PinsN("J_2:32 J_2:34 J_2:36 J_2:38", dir="o"),
                 Attrs(io_standard="3.3-V LVCMOS")),
 
             Resource("i2s", 0,
@@ -130,7 +130,9 @@ class USBSoundCardPlatform(QMTech10CL006Platform, LUNAPlatform):
                 Subsignal("bclk",  Pins("J_3:45", dir="o")),
                 Subsignal("data",  Pins("J_3:47", dir="o")),
                 Subsignal("wclk",  Pins("J_3:49", dir="o")),
-                Attrs(io_standard="3.3-V LVCMOS"))
+                Attrs(io_standard="3.3-V LVCMOS")),
+
+            SPIResource(0, clk="J_3:15", copi="J_3:11", cipo=None, cs_n="J_3:13", attrs=Attrs(io_standard="3.3-V LVCMOS")),
         ]
 
         super().__init__(standalone=False)

@@ -10,6 +10,7 @@ from nmigen.lib.cdc      import FFSynchronizer
 from nmigen_library.io.i2s            import I2STransmitter
 from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
 from nmigen_library.utils             import EdgeToPulse
+from nmigen_library.io.max7219        import SerialLEDArray, NumberToSevenSegmentHex
 
 
 from luna                import top_level_cli
@@ -214,7 +215,6 @@ class USB2AudioInterface(Elaboratable):
             #debug.dac.eq(i2s_transmitter.serial_data_out),
         ]
 
-        # Create our USB-to-serial converter.
         ulpi = platform.request(platform.default_usb_connection)
         m.submodules.usb = usb = USBDevice(bus=ulpi)
 
@@ -352,6 +352,22 @@ class USB2AudioInterface(Elaboratable):
             leds[1].eq(usb.rx_activity_led),
             leds[2].eq(usb.suspended),
             leds[3].eq(usb.reset_detected),
+        ]
+
+        underflow_count = Signal(16)
+
+        with m.If(~usb.suspended & i2s_transmitter.underflow_out):
+            m.d.sync += underflow_count.eq(underflow_count + 1)
+
+        spi = platform.request("spi")
+        m.submodules.sevensegment = sevensegment = DomainRenamer("usb")(NumberToSevenSegmentHex(width=32))
+        m.submodules.led_display  = led_display  = DomainRenamer("usb")(SerialLEDArray(divisor=10, init_delay=24e6))
+        m.d.comb += [
+            sevensegment.number_in[0:16].eq(underflow_count),
+            sevensegment.dots_in.eq(leds),
+            *led_display.connect_to_resource(spi),
+            Cat(led_display.digits_in).eq(sevensegment.seven_segment_out),
+            led_display.valid_in.eq(1),
         ]
 
         return m
