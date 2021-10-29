@@ -9,8 +9,8 @@ class USBStreamToChannels(Elaboratable):
         self._channel_bits    = Shape.cast(range(max_nr_channels)).width
 
         # ports
-        self.usb_stream_in       = StreamInterface()
-        self.channel_stream_out  = StreamInterface(24, extra_fields=[("channel_no", self._channel_bits)])
+        self.usb_stream_in       = StreamInterface(name="usb_stream")
+        self.channel_stream_out  = StreamInterface(name="channel_stream", payload_width=24, extra_fields=[("channel_no", self._channel_bits)])
 
     def elaborate(self, platform: Platform) -> Module:
         m = Module()
