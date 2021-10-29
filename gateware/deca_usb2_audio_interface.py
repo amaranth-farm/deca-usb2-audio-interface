@@ -264,7 +264,7 @@ class USB2AudioInterface(Elaboratable):
         m.submodules.i2c = i2c = DomainRenamer("usb") \
             (I2CStreamTransmitter(i2c_audio_pads, int(60e6/400e3), clk_stretch=False))
         m.submodules.audio_init_delay = audio_init_delay = \
-            Timer(width=24, load=int(16e6), reload=0, allow_restart=False)
+            Timer(width=28, load=int(120e6), reload=0, allow_restart=False)
         m.submodules.i2s_transmitter = i2s_transmitter = DomainRenamer("usb")(I2STransmitter(sample_width=24))
         m.submodules.i2s_receiver    = i2s_receiver    = DomainRenamer("usb")(I2SReceiver(sample_width=24))
 
@@ -430,12 +430,6 @@ class USB2AudioInterface(Elaboratable):
             m.d.comb += sof_wrap.eq(sof_counter == 0)
 
             signals = [
-                ep1_out.stream.ready,
-                ep1_out.stream.valid,
-                ep1_out.stream.first,
-                ep1_out.stream.last,
-                audio_in_frame_bytes_counting,
-                audio_in_frame_bytes,
             ]
 
             signals_bits = sum([s.width for s in signals])
@@ -456,7 +450,7 @@ class USB2AudioInterface(Elaboratable):
 
             m.d.comb += [
                 stream_ep.stream.stream_eq(ila.stream),
-                ila.trigger.eq(audio_in_frame_bytes_counting & ~(ep1_out.stream.ready & ep1_out.stream.valid)),
+                ila.trigger.eq(audio_init_delay.done),
             ]
 
             ILACoreParameters(ila).pickle()
@@ -467,6 +461,7 @@ class USB2AudioInterface(Elaboratable):
             leds[1].eq(usb.rx_activity_led),
             leds[2].eq(usb.suspended),
             leds[3].eq(usb.reset_detected),
+            leds[4].eq(audio_init_delay.done),
         ]
 
         underflow_count = Signal(16)
