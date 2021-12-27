@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from channels_to_usb_stream import ChannelsToUSBStream
-from nmigen.sim import Simulator, Tick
+from amaranth.sim import Simulator, Tick
 
 if __name__ == "__main__":
     dut = ChannelsToUSBStream(2)

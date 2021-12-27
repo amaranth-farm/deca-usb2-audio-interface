@@ -1,6 +1,7 @@
-from nmigen                 import *
-from nmigen.build           import Platform
-from nmigen_library.stream  import StreamInterface
+from amaranth        import *
+from amaranth.build  import Platform
+
+from amlib.stream  import StreamInterface
 
 class USBStreamToChannels(Elaboratable):
     def __init__(self, max_nr_channels=2):
