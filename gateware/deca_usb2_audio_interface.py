@@ -4,16 +4,14 @@
 # SPDX-License-Identifier: CERN-OHL-W-2.0
 import os
 
-from nmigen              import *
-from nmigen.lib.fifo     import AsyncFIFO
-from nmigen.lib.cdc      import FFSynchronizer
+from amaranth            import *
+from amaranth.lib.cdc    import FFSynchronizer
 
-from nmigen_library.io.i2s            import I2STransmitter, I2SReceiver
-from nmigen_library.stream.i2c        import I2CStreamTransmitter
-from nmigen_library.debug.ila         import StreamILA, ILACoreParameters
-from nmigen_library.utils             import EdgeToPulse, Timer
-from nmigen_library.io.max7219        import SerialLEDArray, NumberToSevenSegmentHex
-
+from amlib.io.i2s        import I2STransmitter, I2SReceiver
+from amlib.stream.i2c    import I2CStreamTransmitter
+from amlib.debug.ila     import StreamILA, ILACoreParameters
+from amlib.utils         import EdgeToPulse, Timer
+from amlib.io.max7219    import SerialLEDArray, NumberToSevenSegmentHex
 
 from luna                import top_level_cli
 from luna.usb2           import USBDevice, USBIsochronousInMemoryEndpoint, USBIsochronousOutStreamEndpoint, USBIsochronousInStreamEndpoint

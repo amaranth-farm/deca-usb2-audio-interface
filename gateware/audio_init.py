@@ -1,9 +1,9 @@
-from nmigen import *
-from nmigen.build import Platform
-from nmigen_library.stream import StreamInterface
-from nmigen_library.utils import rising_edge_detected
+from amaranth import *
+from amaranth.build import Platform
 
-from nmigen_library.stream.generator import PacketListStreamer
+from amlib.stream           import StreamInterface
+from amlib.utils            import rising_edge_detected
+from amlib.stream.generator import PacketListStreamer
 
 class AudioInit(Elaboratable):
     # MCLK = 12.288MHz
