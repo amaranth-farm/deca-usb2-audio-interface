@@ -11,7 +11,8 @@ from amlib.io.i2s        import I2STransmitter, I2SReceiver
 from amlib.stream.i2c    import I2CStreamTransmitter
 from amlib.debug.ila     import StreamILA, ILACoreParameters
 from amlib.utils         import EdgeToPulse, Timer
-from amlib.io.max7219    import SerialLEDArray, NumberToSevenSegmentHex
+from amlib.io.max7219    import SerialLEDArray
+from amlib.io.led        import NumberToSevenSegmentHex
 
 from luna                import top_level_cli
 from luna.usb2           import USBDevice, USBIsochronousInMemoryEndpoint, USBIsochronousOutStreamEndpoint, USBIsochronousInStreamEndpoint
